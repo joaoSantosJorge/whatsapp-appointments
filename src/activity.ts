@@ -83,6 +83,29 @@ export function getEvents(opts: { phone?: string; limit?: number; after?: number
   return out;
 }
 
+/** Permanently removes every logged event for this phone number (in memory and on disk). Returns how many. */
+export function deleteContactEvents(phone: string): number {
+  const before = events.length;
+  const keep = events.filter((e) => !("phone" in e && e.phone === phone));
+  events.splice(0, events.length, ...keep);
+  // Rewrite the full file, including lines older than the in-memory window
+  let lines: string[] = [];
+  try {
+    lines = fs.readFileSync(LOG_FILE, "utf8").split("\n").filter(Boolean);
+  } catch {}
+  const kept = lines.filter((l) => {
+    try {
+      return (JSON.parse(l) as { phone?: string }).phone !== phone;
+    } catch {
+      return false;
+    }
+  });
+  const tmp = LOG_FILE + ".tmp";
+  fs.writeFileSync(tmp, kept.map((l) => l + "\n").join(""));
+  fs.renameSync(tmp, LOG_FILE);
+  return before - events.length;
+}
+
 // ---- Settings ----
 
 interface Settings {

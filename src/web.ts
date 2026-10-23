@@ -3,8 +3,9 @@ import fs from "node:fs";
 import http from "node:http";
 import QRCode from "qrcode";
 import { config } from "./config.js";
-import { status } from "./whatsapp.js";
-import { getConversations, getEvents, getSettings, getStats, setRepliesEnabled } from "./activity.js";
+import { linkWhatsApp, status, unlinkWhatsApp } from "./whatsapp.js";
+import { deleteContactEvents, getConversations, getEvents, getSettings, getStats, logEvent, setRepliesEnabled } from "./activity.js";
+import { resetConversation } from "./agent.js";
 import { listUpcomingEvents } from "./calendar.js";
 
 const DASHBOARD_HTML = fs.readFileSync(new URL("./dashboard.html", import.meta.url), "utf8");
@@ -91,6 +92,19 @@ export function startWebServer(port: number) {
           if (typeof body.enabled !== "boolean") return json(res, 400, { error: "Expected { enabled: boolean }" });
           setRepliesEnabled(body.enabled);
           json(res, 200, { repliesEnabled: getSettings().repliesEnabled });
+        } else if (req.method === "POST" && url.pathname === "/api/whatsapp/link") {
+          await linkWhatsApp();
+          json(res, 200, { connection: status.connection });
+        } else if (req.method === "POST" && url.pathname === "/api/whatsapp/unlink") {
+          await unlinkWhatsApp();
+          json(res, 200, { connection: status.connection });
+        } else if (req.method === "DELETE" && url.pathname === "/api/conversations") {
+          const phone = url.searchParams.get("phone")?.replace(/\D/g, "");
+          if (!phone) return json(res, 400, { error: "Expected ?phone=" });
+          const deleted = deleteContactEvents(phone);
+          resetConversation(phone); // also forget the assistant's chat memory for this person
+          logEvent({ type: "system", text: `Deleted a conversation (${deleted} events)` });
+          json(res, 200, { deleted });
         } else {
           json(res, 404, { error: "Not found" });
         }

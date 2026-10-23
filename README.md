@@ -57,14 +57,17 @@ Open `http://localhost:3000/?key=<ADMIN_KEY>` (local, with `PORT` set) or `https
 - **Replies ON/OFF switch** (top right). Replies start **OFF**: incoming messages are logged but get no answer, read
   receipt or typing indicator, and they are never answered later. Switch it on when your test patient is ready. The
   setting is saved in `data/settings.json`, so it survives restarts.
-- WhatsApp connection status and the QR code when it needs linking.
+- **Link phone / Unlink phone** button. Unlinking logs the bot out of WhatsApp (it disappears from the phone's Linked
+  devices); linking shows a QR to scan. With the dashboard on, the bot waits for "Link phone" when no phone is linked.
+- **Delete** a conversation (in its thread): removes it from the log and stats, and the assistant forgets it.
 - Stats: messages received/sent, contacts, response time, bookings, errors, plus hourly/daily charts.
 - Every conversation as a chat thread, with the tools the assistant used, response time and tokens for each reply.
 - Live activity feed (messages, tool calls, ignored messages, errors, connection events), upcoming appointments,
   Claude token usage.
 
 Everything is logged to `data/activity.jsonl`. JSON API (same key, via `?key=` or the `x-admin-key` header):
-`GET /api/state`, `GET /api/events?phone=&limit=`, `GET /api/appointments`, `POST /api/replies {"enabled": true}`.
+`GET /api/state`, `GET /api/events?phone=&limit=`, `GET /api/appointments`, `POST /api/replies {"enabled": true}`,
+`POST /api/whatsapp/link`, `POST /api/whatsapp/unlink`, `DELETE /api/conversations?phone=`.
 
 ## Demo script
 | Patient says | What happens |

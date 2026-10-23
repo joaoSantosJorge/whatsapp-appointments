@@ -103,6 +103,14 @@ header {
 .toggle[aria-checked="true"] .switch { background: var(--good); }
 .toggle[aria-checked="true"] .switch::after { transform: translateX(22px); }
 .toggle:disabled { opacity: .6; cursor: wait; }
+.btn { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--good); border-color: var(--good); color: #fff; }
+.btn.primary:hover { filter: brightness(1.05); background: var(--good); }
+.btn.danger { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 40%, transparent); }
+.btn.danger:hover { background: color-mix(in srgb, var(--critical) 8%, var(--surface)); }
+.btn.small { padding: 3px 10px; font-size: 12px; }
+.btn:disabled { opacity: .6; cursor: wait; }
 .theme-btn { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; width: 34px; height: 34px; cursor: pointer; }
 
 /* Banners */
@@ -222,6 +230,7 @@ table.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: 
       </div>
     </div>
     <span class="pill" id="conn"><span class="dot"></span><span>Connecting…</span></span>
+    <button class="btn" id="link-btn" hidden></button>
     <button class="toggle" id="toggle" role="switch" aria-checked="false" disabled>
       <span class="label" id="toggle-label">Replies OFF<small>Bot is not answering</small></span>
       <span class="switch"></span>
@@ -366,6 +375,44 @@ $("toggle").onclick = async () => {
   }
 };
 
+// ---- Link / unlink phone ----
+$("link-btn").onclick = async () => {
+  const lb = $("link-btn");
+  const link = lb.dataset.action === "link";
+  if (!link && state?.connection === "open" &&
+      !confirm(`Unlink ${state.me ? "+" + state.me : "this phone"}?\n\nThe bot is logged out of WhatsApp and removed from the phone's Linked devices. It stops receiving messages until you link a phone again.`)) return;
+  lb.dataset.busy = "1";
+  lb.disabled = true;
+  lb.textContent = link ? "Linking…" : "Unlinking…";
+  try {
+    await api(link ? "/api/whatsapp/link" : "/api/whatsapp/unlink", { method: "POST" });
+  } catch (e) {
+    alert("Failed: " + e.message);
+  } finally {
+    delete lb.dataset.busy;
+    lb.disabled = false;
+    await refresh();
+  }
+};
+
+// ---- Delete a conversation ----
+async function deleteConvo(phone) {
+  const who = displayName(phone);
+  if (!confirm(`Delete all messages with ${who}?\n\nThis permanently removes them from the dashboard and the stats, and the assistant forgets the conversation. It doesn't delete anything on WhatsApp itself.`)) return;
+  try {
+    await api(`/api/conversations?phone=${encodeURIComponent(phone)}`, { method: "DELETE" });
+    if (selected === phone) {
+      selected = null;
+      threadSig = "";
+      $("thread").innerHTML = `<div class="empty" style="margin:auto">Conversation deleted.</div>`;
+    }
+    await refresh();
+    await refreshFeed(true);
+  } catch (e) {
+    alert("Could not delete: " + e.message);
+  }
+}
+
 // ---- Tool call labels ----
 function parse(s) { try { return JSON.parse(s); } catch { return undefined; } }
 function toolLabel(t) {
@@ -406,10 +453,20 @@ function renderHeader(s) {
     qr: ["warn", "Waiting for QR scan"],
     connecting: ["warn", "Connecting…"],
     closed: ["bad", "Disconnected · retrying"],
+    unlinked: ["", "No phone linked"],
   };
   const [cls, text] = map[s.connection] || map.connecting;
   c.innerHTML = `<span class="dot ${cls}"></span><span>${esc(text)}</span>`;
   c.title = s.connectedSince ? `Connected since ${fmtDateTime(s.connectedSince)}` : "";
+
+  const lb = $("link-btn");
+  lb.hidden = false;
+  if (!lb.dataset.busy) {
+    const [label, cls] = s.connection === "open" ? ["Unlink phone", "btn danger"] : s.connection === "unlinked" ? ["📱 Link phone", "btn primary"] : ["Cancel linking", "btn"];
+    lb.textContent = label;
+    lb.className = cls;
+    lb.dataset.action = s.connection === "unlinked" ? "link" : "unlink";
+  }
 
   const t = $("toggle");
   t.setAttribute("aria-checked", String(s.repliesEnabled));
@@ -425,6 +482,8 @@ function renderHeader(s) {
   if (s.qr) {
     b += `<div class="banner qr"><img src="${s.qr}" alt="WhatsApp QR code"><div><b>📱 Link WhatsApp</b>
       <span>On your phone open <b style="display:inline">WhatsApp → Settings → Linked devices → Link a device</b> and scan this code. It refreshes automatically.</span></div></div>`;
+  } else if (s.connection === "unlinked") {
+    b += `<div class="banner"><span class="icon">📵</span><div><b>No phone linked</b><span>The bot isn't connected to any WhatsApp number. Click <b style="display:inline">📱 Link phone</b> (top right) to get a QR code and scan it with the phone whose WhatsApp the bot should answer.</span></div></div>`;
   } else if (s.connection !== "open") {
     b += `<div class="banner bad"><span class="icon">🔌</span><div><b>WhatsApp is not connected</b><span>Status: ${esc(s.connection)}. The bot reconnects automatically.</span></div></div>`;
   }
@@ -564,8 +623,10 @@ async function renderThread(scroll) {
   const atBottom = !msgsEl || msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 40;
   el.innerHTML = `<div class="thread-head"><b>${esc(conv?.name || "+" + selected)}</b><span class="muted">+${esc(selected)}</span>
       <span style="margin-left:auto" class="tag">${evs.filter((e) => e.type === "received").length} in · ${sent.length} out</span>
-      <span class="tag">avg ${fmtMs(avg)}</span><span class="tag">${fmtNum(tokens)} tokens</span></div>
+      <span class="tag">avg ${fmtMs(avg)}</span><span class="tag">${fmtNum(tokens)} tokens</span>
+      <button class="btn danger small" id="del-convo">🗑 Delete</button></div>
     <div class="msgs">${body || '<div class="empty">No messages.</div>'}</div>`;
+  $("del-convo").onclick = () => deleteConvo(selected);
   const m = el.querySelector(".msgs");
   if (scroll || atBottom) m.scrollTop = m.scrollHeight;
 }

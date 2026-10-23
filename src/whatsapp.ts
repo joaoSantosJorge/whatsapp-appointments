@@ -7,6 +7,7 @@ import makeWASocket, {
   type WAMessage,
 } from "@whiskeysockets/baileys";
 import fs from "node:fs";
+import path from "node:path";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { config } from "./config.js";
@@ -21,7 +22,7 @@ const NON_TEXT_REPLY =
 
 // Exposed to the dashboard
 export const status: {
-  connection: "connecting" | "qr" | "open" | "closed";
+  connection: "unlinked" | "connecting" | "qr" | "open" | "closed";
   qr?: string;
   me?: string;
   connectedSince?: number;
@@ -30,6 +31,54 @@ export const status: {
   connection: "connecting",
   startedAt: Date.now(),
 };
+
+// The live socket. Close events from any other (older) socket are ignored.
+let current: ReturnType<typeof makeWASocket> | undefined;
+let starting = false;
+// False after unlinking: a closed connection is then not restarted until linkWhatsApp() is called
+let wantLinked = true;
+
+export function hasSession(): boolean {
+  return fs.existsSync(path.join(config.authDir, "creds.json"));
+}
+
+function setUnlinked() {
+  status.connection = "unlinked";
+  status.qr = undefined;
+  status.me = undefined;
+  status.connectedSince = undefined;
+}
+
+/** Starts linking: reconnects with the saved session, or shows a QR to scan if there is none. */
+export async function linkWhatsApp() {
+  wantLinked = true;
+  if (current || starting) return;
+  logEvent({ type: "system", text: hasSession() ? "Reconnecting WhatsApp" : "Linking a phone: QR code generated" });
+  await startWhatsApp();
+}
+
+/** Logs this device out of WhatsApp (removes it from the phone's Linked devices) and deletes the session. */
+export async function unlinkWhatsApp() {
+  wantLinked = false;
+  const sock = current;
+  current = undefined;
+  const wasOpen = status.connection === "open";
+  const me = status.me;
+  if (sock) {
+    if (wasOpen) await sock.logout().catch((err) => console.error("[whatsapp] logout failed:", err));
+    else sock.end(undefined);
+  }
+  fs.rmSync(config.authDir, { recursive: true, force: true });
+  setUnlinked();
+  logEvent({ type: "system", text: wasOpen ? `Phone unlinked${me ? ` (+${me})` : ""}` : "Linking cancelled", level: "warn" });
+  console.log("🔌 WhatsApp unlinked.");
+}
+
+/** Marks the bot as idle without a phone (used at startup when no session is saved). */
+export function markUnlinked() {
+  wantLinked = false;
+  setUnlinked();
+}
 
 // One promise chain per chat so fast consecutive messages are processed in order
 const queues = new Map<string, Promise<void>>();
@@ -56,20 +105,28 @@ function textOf(msg: WAMessage): string | undefined {
 }
 
 export async function startWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState(config.authDir);
-  const { version } = await fetchLatestBaileysVersion();
-
-  const sock = makeWASocket({
-    version,
-    auth: state,
-    logger: pino({ level: "silent" }),
-    browser: ["Clínica Maria Bot", "Chrome", "1.0"],
-    markOnlineOnConnect: false,
-  });
-
-  sock.ev.on("creds.update", saveCreds);
+  wantLinked = true;
+  starting = true;
+  status.connection = "connecting";
+  let sock: ReturnType<typeof makeWASocket>;
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState(config.authDir);
+    const { version } = await fetchLatestBaileysVersion();
+    sock = makeWASocket({
+      version,
+      auth: state,
+      logger: pino({ level: "silent" }),
+      browser: ["Clínica Maria Bot", "Chrome", "1.0"],
+      markOnlineOnConnect: false,
+    });
+    sock.ev.on("creds.update", saveCreds);
+  } finally {
+    starting = false;
+  }
+  current = sock;
 
   sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
+    if (sock !== current) return; // stale socket (e.g. after unlinking)
     if (qr) {
       if (status.connection !== "qr") logEvent({ type: "system", text: "Waiting for QR scan to link WhatsApp", level: "warn" });
       status.connection = "qr";
@@ -87,19 +144,25 @@ export async function startWhatsApp() {
       if (config.allowedNumbers.length) console.log(`   (only replying to: ${config.allowedNumbers.join(", ")})`);
     }
     if (connection === "close") {
+      current = undefined;
       status.connection = "closed";
       status.connectedSince = undefined;
       const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
-        // The device was unlinked from the phone: wipe the session so a fresh QR is generated
-        console.error("❌ Logged out from WhatsApp. Clearing session — scan the new QR to link again.");
-        logEvent({ type: "system", text: "Logged out from WhatsApp — session cleared, scan the new QR", level: "error" });
+        // The device was unlinked from the phone: wipe the session and wait for "Link phone" in the dashboard
+        console.error("❌ Logged out from WhatsApp. Session cleared — link again from the dashboard.");
+        logEvent({ type: "system", text: "Phone unlinked from WhatsApp (logged out) — session cleared", level: "error" });
         fs.rmSync(config.authDir, { recursive: true, force: true });
-      } else {
+        if (config.port) {
+          markUnlinked();
+          return;
+        }
+      } else if (wantLinked) {
         console.log(`🔄 Connection closed (${code ?? "unknown"}), reconnecting…`);
         logEvent({ type: "system", text: `Connection closed (${code ?? "unknown"}), reconnecting`, level: "warn" });
       }
-      startWhatsApp();
+      if (wantLinked) startWhatsApp();
+      else setUnlinked();
     }
   });
 
