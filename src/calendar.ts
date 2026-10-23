@@ -172,7 +172,7 @@ export async function bookAppointment(input: BookingInput) {
         "",
         "Marcado via WhatsApp (assistente IA)",
       ].filter((l) => l !== undefined).join("\n"),
-      location: "Clínica Dentária Sorriso Atlântico — Av. da Liberdade 245, 2.º, Lisboa",
+      location: "Clínica Maria — Av. da Liberdade 245, 2.º, Lisboa",
       colorId: specialty.colorId,
       start: { dateTime: input.start.toISOString(), timeZone: config.timezone },
       end: { dateTime: end.toISOString(), timeZone: config.timezone },

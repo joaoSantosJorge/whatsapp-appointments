@@ -1,40 +1,103 @@
-// Minimal status page for hosted deploys: shows the WhatsApp QR so it can be scanned without a terminal.
+// Admin dashboard for the bot: live activity, conversations, stats, the WhatsApp QR and the replies on/off switch.
+import fs from "node:fs";
 import http from "node:http";
 import QRCode from "qrcode";
 import { config } from "./config.js";
 import { status } from "./whatsapp.js";
+import { getConversations, getEvents, getSettings, getStats, setRepliesEnabled } from "./activity.js";
+import { listUpcomingEvents } from "./calendar.js";
 
-function page(body: string, refresh = true) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-${refresh ? '<meta http-equiv="refresh" content="5">' : ""}<title>Sorriso Atlântico Bot</title>
-<style>body{font-family:system-ui,sans-serif;background:#f6f7f9;color:#1d2433;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px}
-main{background:#fff;border-radius:16px;padding:32px;max-width:420px;text-align:center;box-shadow:0 4px 24px #0001}
-img{width:280px;max-width:100%}p{color:#5b6475;line-height:1.5}</style></head><body><main>${body}</main></body></html>`;
+const DASHBOARD_HTML = fs.readFileSync(new URL("./dashboard.html", import.meta.url), "utf8");
+const APPOINTMENTS_TTL_MS = 60_000;
+
+let appointmentsCache: { at: number; data: unknown } | undefined;
+
+async function getAppointments() {
+  if (appointmentsCache && Date.now() - appointmentsCache.at < APPOINTMENTS_TTL_MS) return appointmentsCache.data;
+  try {
+    const data = { ok: true, appointments: await listUpcomingEvents(15) };
+    appointmentsCache = { at: Date.now(), data };
+    return data;
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
+async function getState() {
+  return {
+    now: Date.now(),
+    connection: status.connection,
+    me: status.me,
+    connectedSince: status.connectedSince,
+    startedAt: status.startedAt,
+    qr: status.connection !== "open" && status.qr ? await QRCode.toDataURL(status.qr, { width: 280, margin: 1 }) : undefined,
+    repliesEnabled: getSettings().repliesEnabled,
+    config: {
+      model: config.model,
+      timezone: config.timezone,
+      calendarId: config.calendarId,
+      allowedNumbers: config.allowedNumbers,
+    },
+    stats: getStats(),
+    conversations: getConversations(),
+  };
+}
+
+function json(res: http.ServerResponse, code: number, body: unknown) {
+  res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }).end(JSON.stringify(body));
+}
+
+async function readBody(req: http.IncomingMessage): Promise<unknown> {
+  let raw = "";
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 10_000) throw new Error("Body too large");
+  }
+  return raw ? JSON.parse(raw) : {};
 }
 
 export function startWebServer(port: number) {
   http
     .createServer(async (req, res) => {
-      const url = new URL(req.url ?? "/", "http://localhost");
-      if (url.pathname === "/health") {
-        res.writeHead(200).end("ok");
-        return;
+      try {
+        const url = new URL(req.url ?? "/", "http://localhost");
+        if (url.pathname === "/health") {
+          res.writeHead(200).end("ok");
+          return;
+        }
+        const key = url.searchParams.get("key") ?? req.headers["x-admin-key"];
+        if (config.adminKey && key !== config.adminKey) {
+          if (url.pathname.startsWith("/api/")) return json(res, 401, { error: "Unauthorized" });
+          res
+            .writeHead(401, { "content-type": "text/html; charset=utf-8" })
+            .end(`<!doctype html><meta charset="utf-8"><title>Clínica Maria Bot</title>
+<body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0">
+<p>🔒 Add <code>?key=ADMIN_KEY</code> to the URL.</p></body>`);
+          return;
+        }
+
+        if (req.method === "GET" && url.pathname === "/") {
+          res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(DASHBOARD_HTML);
+        } else if (req.method === "GET" && url.pathname === "/api/state") {
+          json(res, 200, await getState());
+        } else if (req.method === "GET" && url.pathname === "/api/events") {
+          const limit = Math.min(Number(url.searchParams.get("limit")) || 200, 1000);
+          const after = url.searchParams.has("after") ? Number(url.searchParams.get("after")) : undefined;
+          json(res, 200, { events: getEvents({ phone: url.searchParams.get("phone") ?? undefined, limit, after }) });
+        } else if (req.method === "GET" && url.pathname === "/api/appointments") {
+          json(res, 200, await getAppointments());
+        } else if (req.method === "POST" && url.pathname === "/api/replies") {
+          const body = (await readBody(req)) as { enabled?: unknown };
+          if (typeof body.enabled !== "boolean") return json(res, 400, { error: "Expected { enabled: boolean }" });
+          setRepliesEnabled(body.enabled);
+          json(res, 200, { repliesEnabled: getSettings().repliesEnabled });
+        } else {
+          json(res, 404, { error: "Not found" });
+        }
+      } catch (err) {
+        console.error("[web] request failed:", err);
+        if (!res.headersSent) json(res, 500, { error: (err as Error).message });
       }
-      if (config.adminKey && url.searchParams.get("key") !== config.adminKey) {
-        res.writeHead(401, { "content-type": "text/html; charset=utf-8" }).end(page("<h1>🔒</h1><p>Add <code>?key=ADMIN_KEY</code> to the URL.</p>", false));
-        return;
-      }
-      let body: string;
-      if (status.connection === "open") {
-        body = `<h1>✅ Connected</h1><p>WhatsApp is linked${status.me ? ` to <b>+${status.me}</b>` : ""}. The assistant is answering messages.</p>`;
-      } else if (status.qr) {
-        const img = await QRCode.toDataURL(status.qr, { width: 280, margin: 1 });
-        body = `<h1>📱 Link WhatsApp</h1><img src="${img}" alt="WhatsApp QR code">
-<p>On your phone: <b>WhatsApp → Settings → Linked devices → Link a device</b>, then scan this code. It refreshes automatically.</p>`;
-      } else {
-        body = `<h1>⏳ Connecting…</h1><p>Waiting for WhatsApp (${status.connection}).</p>`;
-      }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(page(body));
     })
-    .listen(port, () => console.log(`🌐 Status page on port ${port}`));
+    .listen(port, () => console.log(`🌐 Dashboard on http://localhost:${port}/${config.adminKey ? "?key=…" : ""}`));
 }

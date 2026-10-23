@@ -1,7 +1,7 @@
-# 🦷 Sorriso Atlântico — WhatsApp AI Receptionist (demo)
+# 🦷 Clínica Maria — WhatsApp AI Receptionist (demo)
 
 Patients message your WhatsApp. A Claude-powered assistant answers questions about the (fictional)
-**Clínica Dentária Sorriso Atlântico**. It also checks your Google Calendar and books, proposes alternatives for, or cancels
+**Clínica Maria**. It also checks your Google Calendar and books, proposes alternatives for, or cancels
 appointments. Each booking shows up in Google Calendar as `🦷 [Especialidade] Serviço — Nome`, colour-coded by specialty.
 
 ```
@@ -16,7 +16,7 @@ WhatsApp (your number, linked via QR) ──► Baileys ──► Claude agent �
 2. **APIs & Services → Library** → enable **Google Calendar API**.
 3. **IAM & Admin → Service Accounts** → *Create service account* (no roles needed) → open it →
    **Keys → Add key → JSON**. Save the file in this folder as `service-account.json`.
-4. In Google Calendar (web), create a new calendar called **"Clínica Sorriso Atlântico"** (recommended, so
+4. In Google Calendar (web), create a new calendar called **"Clínica Maria"** (recommended, so
    demo bookings don't mix with your personal events). You can also use your main calendar.
 5. Open that calendar's **Settings → Share with specific people → Add** the service account email
    (`…@….iam.gserviceaccount.com`) with **"Make changes to events"**.
@@ -52,6 +52,20 @@ railway variables --set "ANTHROPIC_API_KEY=sk-ant-..." \
 Railway redeploys automatically. Open `https://<your-domain>/?key=<ADMIN_KEY>` and scan the QR from that page.
 Redeploy code changes with `railway up`.
 
+## Dashboard
+Open `http://localhost:3000/?key=<ADMIN_KEY>` (local, with `PORT` set) or `https://<your-domain>/?key=<ADMIN_KEY>` (Railway):
+- **Replies ON/OFF switch** (top right). Replies start **OFF**: incoming messages are logged but get no answer, read
+  receipt or typing indicator, and they are never answered later. Switch it on when your test patient is ready. The
+  setting is saved in `data/settings.json`, so it survives restarts.
+- WhatsApp connection status and the QR code when it needs linking.
+- Stats: messages received/sent, contacts, response time, bookings, errors, plus hourly/daily charts.
+- Every conversation as a chat thread, with the tools the assistant used, response time and tokens for each reply.
+- Live activity feed (messages, tool calls, ignored messages, errors, connection events), upcoming appointments,
+  Claude token usage.
+
+Everything is logged to `data/activity.jsonl`. JSON API (same key, via `?key=` or the `x-admin-key` header):
+`GET /api/state`, `GET /api/events?phone=&limit=`, `GET /api/appointments`, `POST /api/replies {"enabled": true}`.
+
 ## Demo script
 | Patient says | What happens |
 |---|---|
@@ -70,6 +84,8 @@ Tip: block a slot manually in Google Calendar before the demo (e.g. tomorrow 10:
 - `src/calendar.ts`: availability (opening hours + Google free/busy) and booking/cancelling.
 - `src/agent.ts`: Claude system prompt, tools and tool-use loop; history in `data/conversations.json`.
 - `src/whatsapp.ts`: WhatsApp connection (Baileys) and message handling.
+- `src/activity.ts`: activity log, stats and the replies on/off setting.
+- `src/web.ts` + `src/dashboard.html`: the dashboard and its API.
 
 > Baileys uses WhatsApp Web's protocol and is unofficial. That's fine for a demo. For production, move to the
 > official WhatsApp Business Cloud API (only `src/whatsapp.ts` needs to change).

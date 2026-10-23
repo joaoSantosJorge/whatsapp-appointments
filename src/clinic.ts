@@ -178,11 +178,11 @@ export const SPECIALTIES: Specialty[] = [
 ];
 
 export const CLINIC = {
-  name: "Clínica Dentária Sorriso Atlântico",
+  name: "Clínica Maria",
   tagline: "Medicina dentária digital, sem pressas e sem dor.",
   address: "Av. da Liberdade 245, 2.º andar, 1250-143 Lisboa",
   phone: "+351 213 000 245",
-  email: "geral@sorrisoatlantico.pt",
+  email: "geral@clinicamaria.pt",
   directions: "Metro Avenida (linha azul) a 2 minutos a pé. Parque de estacionamento Marquês de Pombal a 300 m (1.ª hora oferecida aos pacientes).",
   openingHours: "Segunda a sexta: 09:00–13:00 e 14:00–19:00. Sábado: 09:00–13:00. Domingos e feriados: encerrado.",
   differentiators: [

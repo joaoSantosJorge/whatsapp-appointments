@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { CLINIC } from "./clinic.js";
 import { bookAppointment, cancelAppointment, findAppointmentsByPhone, getAvailableSlots } from "./calendar.js";
 import { describe, parseStart } from "./time.js";
+import type { ToolCall, Usage } from "./activity.js";
 
 const client = new Anthropic();
 
@@ -157,11 +158,29 @@ export function resetConversation(phone: string) {
 const FALLBACK_REPLY =
   `Peço desculpa, estou com uma dificuldade técnica neste momento. 🙏 Pode tentar novamente daqui a pouco ou ligar para ${CLINIC.phone}.`;
 
+export interface AgentResult {
+  reply: string;
+  toolCalls: ToolCall[];
+  usage: Usage;
+  fallback: boolean;
+  error?: string;
+}
+
 /**
- * Handles one incoming patient message and returns the reply text.
+ * Handles one incoming patient message and returns the reply text plus what happened along the way.
  * `phone` is the patient's number (digits only, with country code) and is the only identity used by tools.
  */
-export async function handleMessage(phone: string, text: string): Promise<string> {
+export async function handleMessage(phone: string, text: string): Promise<AgentResult> {
+  const toolCalls: ToolCall[] = [];
+  const usage: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const done = (reply: string, extra: { fallback?: boolean; error?: string } = {}): AgentResult => ({
+    reply,
+    toolCalls,
+    usage,
+    fallback: extra.fallback ?? false,
+    error: extra.error,
+  });
+
   const existing = conversations.get(phone);
   const fresh = !existing || Date.now() - existing.updatedAt > CONVERSATION_TTL_MS;
   // Work on a copy; only commit to history if the whole turn succeeds
@@ -184,10 +203,14 @@ export async function handleMessage(phone: string, text: string): Promise<string
         tools,
         messages,
       });
+      usage.input += response.usage.input_tokens;
+      usage.output += response.usage.output_tokens;
+      usage.cacheRead += response.usage.cache_read_input_tokens ?? 0;
+      usage.cacheWrite += response.usage.cache_creation_input_tokens ?? 0;
 
       if (response.stop_reason === "refusal") {
         console.warn(`[agent] refusal for ${phone}:`, response.stop_details);
-        return FALLBACK_REPLY;
+        return done(FALLBACK_REPLY, { fallback: true, error: "Model refusal" });
       }
 
       messages.push({ role: "assistant", content: response.content });
@@ -203,17 +226,20 @@ export async function handleMessage(phone: string, text: string): Promise<string
           .trim();
         conversations.set(phone, { messages, updatedAt: Date.now() });
         saveHistory();
-        return reply || FALLBACK_REPLY;
+        return reply ? done(reply) : done(FALLBACK_REPLY, { fallback: true, error: "Empty reply" });
       }
 
       const results = await Promise.all(
         toolUses.map(async (tu): Promise<Anthropic.Beta.BetaToolResultBlockParam> => {
           try {
             const result = await runTool(tu.name, tu.input, phone);
-            console.log(`  🔧 ${tu.name}(${JSON.stringify(tu.input)}) →`, JSON.stringify(result).slice(0, 300));
+            const json = JSON.stringify(result);
+            console.log(`  🔧 ${tu.name}(${JSON.stringify(tu.input)}) →`, json.slice(0, 300));
+            toolCalls.push({ name: tu.name, input: tu.input, result: json.slice(0, 2000), ok: true });
             return { type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) };
           } catch (err) {
             console.error(`  ❌ ${tu.name} failed:`, err);
+            toolCalls.push({ name: tu.name, input: tu.input, result: (err as Error).message, ok: false });
             return { type: "tool_result", tool_use_id: tu.id, content: `Erro: ${(err as Error).message}`, is_error: true };
           }
         }),
@@ -221,13 +247,13 @@ export async function handleMessage(phone: string, text: string): Promise<string
       messages.push({ role: "user", content: results });
     }
     console.error(`[agent] hit max tool iterations for ${phone}`);
-    return FALLBACK_REPLY;
+    return done(FALLBACK_REPLY, { fallback: true, error: "Hit max tool iterations" });
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
       console.error(`[agent] Claude API error ${err.status}:`, err.message);
-    } else {
-      console.error("[agent] unexpected error:", err);
+      return done(FALLBACK_REPLY, { fallback: true, error: `Claude API error ${err.status}: ${err.message}` });
     }
-    return FALLBACK_REPLY;
+    console.error("[agent] unexpected error:", err);
+    return done(FALLBACK_REPLY, { fallback: true, error: (err as Error).message ?? String(err) });
   }
 }

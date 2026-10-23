@@ -16,6 +16,6 @@ while (true) {
     console.log("🔄 reset\n");
     continue;
   }
-  const reply = await handleMessage(phone, text);
+  const { reply } = await handleMessage(phone, text);
   console.log(`\n🤖 ${reply}\n`);
 }

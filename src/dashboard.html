@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clínica Maria Bot</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦷</text></svg>">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --good: #0ca30c;
+  --good-ink: #006300;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --bubble-in: #ffffff;
+  --bubble-out: #dcf2e3;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --good-ink: #0ca30c;
+    --bubble-in: #232321;
+    --bubble-out: #12352a;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --good-ink: #0ca30c;
+  --bubble-in: #232321;
+  --bubble-out: #12352a;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+button { font: inherit; color: inherit; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 0 16px 48px; }
+
+/* Header */
+header {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--page) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.bar { max-width: 1320px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
+.brand .logo { font-size: 26px; }
+.brand h1 { font-size: 16px; margin: 0; font-weight: 650; }
+.brand p { margin: 0; color: var(--ink-2); font-size: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.good { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent); }
+.dot.warn { background: var(--warning); }
+.dot.bad { background: var(--critical); }
+
+.toggle { display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+.toggle .label { font-weight: 600; font-size: 13px; }
+.toggle .label small { display: block; font-weight: 400; color: var(--ink-2); font-size: 11px; }
+.switch { width: 52px; height: 30px; border-radius: 999px; background: var(--axis); position: relative; transition: background .2s; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s; }
+.toggle[aria-checked="true"] .switch { background: var(--good); }
+.toggle[aria-checked="true"] .switch::after { transform: translateX(22px); }
+.toggle:disabled { opacity: .6; cursor: wait; }
+.theme-btn { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; width: 34px; height: 34px; cursor: pointer; }
+
+/* Banners */
+.banner { margin-top: 16px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); display: flex; gap: 12px; align-items: center; }
+.banner.warn { border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 10%, var(--surface)); }
+.banner.bad { border-color: color-mix(in srgb, var(--critical) 50%, transparent); background: color-mix(in srgb, var(--critical) 8%, var(--surface)); }
+.banner .icon { font-size: 20px; }
+.banner b { display: block; }
+.banner span { color: var(--ink-2); }
+.qr { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }
+.qr img { width: 220px; height: 220px; border-radius: 8px; background: #fff; padding: 6px; }
+@media (max-width: 560px) { .qr { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
+
+/* Cards & grid */
+.grid { display: grid; gap: 16px; margin-top: 16px; }
+.kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.convo-grid { grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .three { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 800px) { .two, .three, .convo-grid { grid-template-columns: minmax(0, 1fr); } .thread { height: 480px; } .convos { max-height: 320px; } }
+@media (max-width: 520px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); min-width: 0; }
+.card > h2 { font-size: 13px; font-weight: 600; margin: 0; padding: 14px 16px 0; display: flex; align-items: center; gap: 8px; }
+.card > h2 .sub { color: var(--muted); font-weight: 400; margin-left: auto; font-size: 12px; }
+.card .body { padding: 12px 16px 16px; }
+.section-title { margin: 28px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+
+.kpi { padding: 14px 16px; }
+.kpi .k-label { color: var(--ink-2); font-size: 12px; }
+.kpi .k-value { font-size: 28px; font-weight: 650; margin: 2px 0; letter-spacing: -.01em; }
+.kpi .k-sub { color: var(--muted); font-size: 12px; }
+
+/* Charts */
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); padding: 8px 16px 0; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.chart { position: relative; padding: 4px 8px 8px; }
+.chart svg { display: block; width: 100%; height: 190px; overflow: visible; }
+.chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .baseline { stroke: var(--axis); stroke-width: 1; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:hover, .chart .hit.on { fill: color-mix(in srgb, var(--ink) 5%, transparent); }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,.12); border-radius: 8px; padding: 8px 10px; font-size: 12px; white-space: nowrap; display: none; z-index: 5; }
+.tip b { display: block; margin-bottom: 2px; }
+.tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+
+/* Lists */
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.list li:last-child { border-bottom: 0; }
+.list .grow { flex: 1; min-width: 0; }
+.list .num { font-variant-numeric: tabular-nums; font-weight: 600; }
+.muted { color: var(--muted); }
+.ink2 { color: var(--ink-2); }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; }
+.meter { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 4px; }
+.meter > div { height: 100%; background: var(--series-1); border-radius: 3px; }
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+dl.kv dt { color: var(--ink-2); }
+dl.kv dd { margin: 0; word-break: break-all; font-variant-numeric: tabular-nums; }
+
+/* Conversations */
+.convos { max-height: 560px; overflow: auto; }
+.convo { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.convo:hover { background: var(--surface-2); }
+.convo.sel { background: color-mix(in srgb, var(--series-1) 10%, var(--surface)); }
+.convo .top { display: flex; gap: 8px; align-items: baseline; }
+.convo .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.convo .time { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.convo .last { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); white-space: nowrap; }
+.tag.warn { background: color-mix(in srgb, var(--warning) 18%, var(--surface)); border-color: color-mix(in srgb, var(--warning) 45%, transparent); }
+.tag.bad { background: color-mix(in srgb, var(--critical) 12%, var(--surface)); border-color: color-mix(in srgb, var(--critical) 40%, transparent); }
+.tag.good { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+
+.thread { height: 560px; display: flex; flex-direction: column; }
+.thread-head { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.thread-head b { font-size: 15px; }
+.msgs { flex: 1; overflow: auto; padding: 16px; background: var(--surface-2); border-radius: 0 0 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.msg { max-width: min(78%, 560px); padding: 8px 12px; border-radius: 12px; border: 1px solid var(--border); white-space: pre-wrap; word-wrap: break-word; }
+.msg.in { align-self: flex-start; background: var(--bubble-in); border-top-left-radius: 4px; }
+.msg.out { align-self: flex-end; background: var(--bubble-out); border-top-right-radius: 4px; }
+.msg.ignored { opacity: .7; border-style: dashed; }
+.msg .meta { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; white-space: normal; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; white-space: normal; }
+.chip { font-size: 11.5px; padding: 2px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-2); }
+.chip.bad { color: var(--critical); }
+.sysline { align-self: center; font-size: 12px; color: var(--muted); }
+
+/* Activity feed */
+.filters { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 16px 0; }
+.filters button { border: 1px solid var(--border); background: var(--surface); padding: 4px 12px; border-radius: 999px; cursor: pointer; font-size: 12.5px; }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.feed { max-height: 520px; overflow: auto; padding: 4px 16px 12px; }
+.ev { display: grid; grid-template-columns: 70px 22px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); align-items: start; }
+.ev:last-child { border-bottom: 0; }
+.ev .t { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.ev .what { min-width: 0; }
+.ev .what .txt { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ev.new { animation: flash 1.5s ease-out; }
+@keyframes flash { from { background: color-mix(in srgb, var(--series-1) 14%, transparent); } to { background: transparent; } }
+.link { background: none; border: 0; padding: 0; cursor: pointer; font-weight: 600; text-decoration: underline; text-decoration-color: var(--axis); text-underline-offset: 2px; }
+
+footer { margin-top: 32px; color: var(--muted); font-size: 12px; text-align: center; }
+table.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">
+      <span class="logo">🦷</span>
+      <div>
+        <h1>Clínica Maria · WhatsApp receptionist</h1>
+        <p id="subtitle">Loading…</p>
+      </div>
+    </div>
+    <span class="pill" id="conn"><span class="dot"></span><span>Connecting…</span></span>
+    <button class="toggle" id="toggle" role="switch" aria-checked="false" disabled>
+      <span class="label" id="toggle-label">Replies OFF<small>Bot is not answering</small></span>
+      <span class="switch"></span>
+    </button>
+    <button class="theme-btn" id="theme" title="Toggle light/dark">◐</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="banners"></div>
+
+  <div class="grid kpis" id="kpis"></div>
+
+  <div class="grid two">
+    <div class="card">
+      <h2>Messages per hour <span class="sub">last 24 hours</span></h2>
+      <div class="legend"><span><i style="background:var(--series-1)"></i>Received</span><span><i style="background:var(--series-2)"></i>Sent</span></div>
+      <div class="chart" id="chart-hour"></div>
+    </div>
+    <div class="card">
+      <h2>Messages per day <span class="sub">last 14 days</span></h2>
+      <div class="legend"><span><i style="background:var(--series-1)"></i>Received</span><span><i style="background:var(--series-2)"></i>Sent</span></div>
+      <div class="chart" id="chart-day"></div>
+    </div>
+  </div>
+
+  <h3 class="section-title">Conversations</h3>
+  <div class="grid convo-grid">
+    <div class="card">
+      <h2>Contacts <span class="sub" id="convo-count"></span></h2>
+      <div class="convos" id="convos" style="margin-top:8px"></div>
+    </div>
+    <div class="card thread" id="thread">
+      <div class="empty" style="margin:auto">Select a conversation to see the full thread.</div>
+    </div>
+  </div>
+
+  <h3 class="section-title">Live activity</h3>
+  <div class="card" style="margin-top:16px">
+    <div class="filters" id="filters">
+      <button data-f="all" aria-pressed="true">All</button>
+      <button data-f="messages" aria-pressed="false">Messages</button>
+      <button data-f="tools" aria-pressed="false">Tool calls</button>
+      <button data-f="ignored" aria-pressed="false">Ignored</button>
+      <button data-f="errors" aria-pressed="false">Errors</button>
+      <button data-f="system" aria-pressed="false">System</button>
+    </div>
+    <div class="feed" id="feed"></div>
+  </div>
+
+  <h3 class="section-title">Operations</h3>
+  <div class="grid three">
+    <div class="card">
+      <h2>📅 Upcoming appointments <span class="sub">Google Calendar</span></h2>
+      <div class="body"><ul class="list" id="appts"><li class="empty">Loading…</li></ul></div>
+    </div>
+    <div class="card">
+      <h2>🔧 What the assistant did</h2>
+      <div class="body" id="tools"></div>
+    </div>
+    <div class="card">
+      <h2>📥 How incoming messages were handled</h2>
+      <div class="body" id="handled"></div>
+    </div>
+    <div class="card">
+      <h2>⚙️ System</h2>
+      <div class="body" id="system"></div>
+    </div>
+    <div class="card">
+      <h2>🧮 Claude usage</h2>
+      <div class="body" id="usage"></div>
+    </div>
+    <div class="card">
+      <h2>🏆 Most active contacts</h2>
+      <div class="body" id="top"></div>
+    </div>
+  </div>
+
+  <footer id="footer">Auto-refreshes every 3 seconds.</footer>
+</div>
+
+<script>
+const KEY = new URLSearchParams(location.search).get("key") || "";
+const api = (path, opts = {}) =>
+  fetch(path, { ...opts, headers: { "x-admin-key": KEY, "content-type": "application/json", ...(opts.headers || {}) } }).then((r) => {
+    if (!r.ok) throw new Error(r.status === 401 ? "Unauthorized — check ?key=" : `HTTP ${r.status}`);
+    return r.json();
+  });
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const wa = (s) => esc(s).replace(/\*([^*\n]+)\*/g, "<b>$1</b>").replace(/_([^_\n]+)_/g, "<i>$1</i>");
+const fmtNum = (n) => (n ?? 0).toLocaleString();
+const fmtMs = (ms) => (ms == null ? "—" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
+const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const fmtDateTime = (ts) => new Date(ts).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+function ago(ts) {
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return fmtDateTime(ts);
+}
+function duration(ms) {
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (d) return `${d}d ${h % 24}h`;
+  if (h) return `${h}h ${m % 60}m`;
+  return `${m}m`;
+}
+
+// ---- Theme ----
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+$("theme").onclick = () => {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch {}
+};
+
+// ---- State ----
+let state = null;
+let names = {};
+let selected = null;
+let feedFilter = "all";
+let lastFeedTop = 0;
+
+// ---- Replies toggle ----
+$("toggle").onclick = async () => {
+  const on = !state?.repliesEnabled;
+  if (on && !confirm("Turn WhatsApp replies ON?\n\nThe assistant will start answering every new message" +
+      (state?.config.allowedNumbers.length ? ` from ${state.config.allowedNumbers.map((n) => "+" + n).join(", ")}` : " it receives") +
+      ".\nMessages received while replies were off will NOT be answered.")) return;
+  $("toggle").disabled = true;
+  try {
+    await api("/api/replies", { method: "POST", body: JSON.stringify({ enabled: on }) });
+    await refresh();
+  } catch (e) {
+    alert("Could not change replies: " + e.message);
+  } finally {
+    $("toggle").disabled = false;
+  }
+};
+
+// ---- Tool call labels ----
+function parse(s) { try { return JSON.parse(s); } catch { return undefined; } }
+function toolLabel(t) {
+  const i = t.input || {}, r = parse(t.result) || {};
+  if (!t.ok) return { text: `⚠️ ${t.name} failed: ${t.result}`, bad: true };
+  switch (t.name) {
+    case "check_availability": {
+      const n = Array.isArray(r.availableByDay) ? r.availableByDay.reduce((a, d) => a + (d.slots?.length || 0), 0) : null;
+      const req = r.requested ? (r.requested.available ? " · requested time free" : ` · requested time ${r.requested.reason}`) : "";
+      return { text: `🔎 Checked availability · ${i.service_id} · ${i.date_from}${i.date_to ? "→" + i.date_to : ""}${i.preferred_time ? " " + i.preferred_time : ""}${n != null ? ` · ${n} slots offered` : ""}${req}` };
+    }
+    case "book_appointment":
+      return r.ok ? { text: `📅 Booked ${r.service} · ${r.when} · ${i.patient_name}` } : { text: `⚠️ Booking refused: ${r.error}`, bad: true };
+    case "list_my_appointments":
+      return { text: `📋 Listed appointments (${r.appointments?.length ?? 0})` };
+    case "cancel_appointment":
+      return r.ok ? { text: `🗑️ Cancelled ${r.cancelled?.title ?? ""}` } : { text: `⚠️ Cancel refused: ${r.error}`, bad: true };
+    default:
+      return { text: `🔧 ${t.name}` };
+  }
+}
+const chipsHtml = (calls) =>
+  calls?.length ? `<div class="chips">${calls.map((t) => { const l = toolLabel(t); return `<span class="chip${l.bad ? " bad" : ""}" title="${esc(JSON.stringify(t.input))}">${esc(l.text)}</span>`; }).join("")}</div>` : "";
+
+const HANDLED = {
+  replied: { label: "Answered", cls: "good" },
+  paused: { label: "Ignored · replies off", cls: "warn" },
+  not_allowed: { label: "Ignored · not in allowlist", cls: "warn" },
+  non_text: { label: "Non-text message", cls: "" },
+  reset: { label: "/reset", cls: "" },
+};
+
+// ---- Header, banners ----
+function renderHeader(s) {
+  const c = $("conn");
+  const map = {
+    open: ["good", `WhatsApp linked${s.me ? " · +" + s.me : ""}`],
+    qr: ["warn", "Waiting for QR scan"],
+    connecting: ["warn", "Connecting…"],
+    closed: ["bad", "Disconnected · retrying"],
+  };
+  const [cls, text] = map[s.connection] || map.connecting;
+  c.innerHTML = `<span class="dot ${cls}"></span><span>${esc(text)}</span>`;
+  c.title = s.connectedSince ? `Connected since ${fmtDateTime(s.connectedSince)}` : "";
+
+  const t = $("toggle");
+  t.setAttribute("aria-checked", String(s.repliesEnabled));
+  t.disabled = false;
+  $("toggle-label").innerHTML = s.repliesEnabled
+    ? `Replies ON<small>Bot is answering</small>`
+    : `Replies OFF<small>Messages logged only</small>`;
+
+  $("subtitle").textContent = `Model ${s.config.model} · up ${duration(s.now - s.startedAt)}` +
+    (s.connectedSince ? ` · connected ${duration(s.now - s.connectedSince)}` : "");
+
+  let b = "";
+  if (s.qr) {
+    b += `<div class="banner qr"><img src="${s.qr}" alt="WhatsApp QR code"><div><b>📱 Link WhatsApp</b>
+      <span>On your phone open <b style="display:inline">WhatsApp → Settings → Linked devices → Link a device</b> and scan this code. It refreshes automatically.</span></div></div>`;
+  } else if (s.connection !== "open") {
+    b += `<div class="banner bad"><span class="icon">🔌</span><div><b>WhatsApp is not connected</b><span>Status: ${esc(s.connection)}. The bot reconnects automatically.</span></div></div>`;
+  }
+  if (!s.repliesEnabled) {
+    b += `<div class="banner warn"><span class="icon">⏸️</span><div><b>Replies are OFF</b><span>Incoming messages are recorded below but nobody gets an answer, read receipt or typing indicator. Switch replies on (top right) when your patient is ready to message.</span></div></div>`;
+  }
+  $("banners").innerHTML = b;
+}
+
+// ---- KPIs ----
+function renderKpis(st) {
+  const tiles = [
+    ["Received today", fmtNum(st.received.today), `${fmtNum(st.received.week)} this week · ${fmtNum(st.received.total)} total`],
+    ["Sent today", fmtNum(st.sent.today), `${fmtNum(st.sent.week)} this week · ${fmtNum(st.sent.total)} total`],
+    ["Contacts", fmtNum(st.contacts), `${fmtNum(st.activeContacts24h)} active in last 24h`],
+    ["Avg response time", fmtMs(st.latency.avgMs), `p95 ${fmtMs(st.latency.p95Ms)}`],
+    ["Bookings", fmtNum(st.bookings), `${fmtNum(st.cancellations)} cancelled · ${fmtNum(st.failedBookings)} refused`],
+    ["Errors", fmtNum(st.errors), `${fmtNum(st.fallbacks)} fallback replies sent`],
+  ];
+  $("kpis").innerHTML = tiles
+    .map(([l, v, s]) => `<div class="card kpi"><div class="k-label">${l}</div><div class="k-value">${v}</div><div class="k-sub">${s}</div></div>`)
+    .join("");
+}
+
+// ---- Grouped bar chart (received vs sent) ----
+function barChart(el, rows, labelOf, everyNth) {
+  const W = Math.max(el.clientWidth - 16, 280), H = 190, padL = 28, padB = 22, padT = 8;
+  const max = Math.max(1, ...rows.flatMap((r) => [r.received, r.sent]));
+  const step = max <= 4 ? 1 : Math.ceil(max / 4);
+  const top = Math.ceil(max / step) * step;
+  const y = (v) => padT + (H - padT - padB) * (1 - v / top);
+  const colW = (W - padL) / rows.length;
+  const barW = Math.max(2, Math.min(14, (colW - 6) / 2 - 1));
+  const r = Math.min(4, barW / 2);
+  // Bar with rounded data end, square at baseline
+  const bar = (x, v, color) => {
+    if (!v) return "";
+    const y0 = y(0), y1 = y(v), h = y0 - y1, rr = Math.min(r, h);
+    return `<path fill="${color}" d="M${x},${y0}V${y1 + rr}Q${x},${y1} ${x + rr},${y1}H${x + barW - rr}Q${x + barW},${y1} ${x + barW},${y1 + rr}V${y0}Z"/>`;
+  };
+  let svg = "";
+  for (let v = 0; v <= top; v += step) {
+    svg += `<line class="${v ? "gridline" : "baseline"}" x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/>`;
+    svg += `<text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  }
+  rows.forEach((row, i) => {
+    const cx = padL + colW * i + colW / 2;
+    svg += `<rect class="hit" data-i="${i}" x="${padL + colW * i}" y="${padT}" width="${colW}" height="${H - padT - padB}" rx="4"/>`;
+    svg += bar(cx - barW - 1, row.received, "var(--series-1)");
+    svg += bar(cx + 1, row.sent, "var(--series-2)");
+    if ((rows.length - 1 - i) % everyNth === 0)
+      svg += `<text x="${cx}" y="${H - 6}" text-anchor="middle">${esc(labelOf(row, i, true))}</text>`;
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Messages received and sent">${svg}</svg><div class="tip"></div>
+    <table class="sr"><tr><th>Period</th><th>Received</th><th>Sent</th></tr>${rows.map((r, i) => `<tr><td>${esc(labelOf(r, i))}</td><td>${r.received}</td><td>${r.sent}</td></tr>`).join("")}</table>`;
+  const tip = el.querySelector(".tip");
+  el.querySelectorAll(".hit").forEach((h) => {
+    h.style.pointerEvents = "all";
+    h.addEventListener("mouseenter", () => {
+      const row = rows[+h.dataset.i];
+      tip.innerHTML = `<b>${esc(labelOf(row, +h.dataset.i))}</b><div><i style="background:var(--series-1)"></i>Received ${row.received}</div><div><i style="background:var(--series-2)"></i>Sent ${row.sent}</div>`;
+      tip.style.display = "block";
+      const box = h.getBoundingClientRect(), host = el.getBoundingClientRect();
+      let left = box.left - host.left + box.width / 2 - tip.offsetWidth / 2;
+      left = Math.max(0, Math.min(left, host.width - tip.offsetWidth));
+      tip.style.left = left + "px";
+      tip.style.top = "0px";
+    });
+    h.addEventListener("mouseleave", () => (tip.style.display = "none"));
+  });
+}
+
+function renderCharts(st) {
+  barChart($("chart-hour"), st.perHour, (r, i, short) => (short ? r.hour + "h" : i === 23 ? `${r.hour}:00 (this hour)` : `${r.hour}:00`), 3);
+  const dayFmt = (d, long) => new Date(d + "T12:00:00").toLocaleDateString([], long ? { weekday: "short", day: "numeric", month: "short" } : { day: "numeric", month: "short" });
+  barChart($("chart-day"), st.perDay, (r, i, short) => dayFmt(r.date, !short), 2);
+}
+
+// ---- Conversations ----
+function displayName(phone) { return names[phone] || "+" + phone; }
+function renderConvos(list) {
+  names = Object.fromEntries(list.filter((c) => c.name).map((c) => [c.phone, c.name]));
+  $("convo-count").textContent = list.length ? `${list.length}` : "";
+  if (!list.length) {
+    $("convos").innerHTML = `<div class="empty">No messages yet.<br>When someone writes to your WhatsApp it shows up here.</div>`;
+    return;
+  }
+  $("convos").innerHTML = list
+    .map((c) => `<button class="convo${c.phone === selected ? " sel" : ""}" data-phone="${esc(c.phone)}">
+      <div class="top"><span class="name">${esc(c.name || "+" + c.phone)}</span>${c.name ? `<span class="muted" style="font-size:12px">+${esc(c.phone)}</span>` : ""}<span class="time">${ago(c.lastTs)}</span></div>
+      <div class="last">${c.lastType === "sent" ? "🤖 " : ""}${esc(c.lastText)}</div>
+      <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><span class="tag">${c.count} msgs</span>${c.tools ? `<span class="tag">${c.tools} tool calls</span>` : ""}${c.ignored ? `<span class="tag warn">${c.ignored} ignored</span>` : ""}</div>
+    </button>`)
+    .join("");
+  $("convos").querySelectorAll(".convo").forEach((b) => (b.onclick = () => selectConvo(b.dataset.phone)));
+}
+
+async function selectConvo(phone) {
+  selected = phone;
+  document.querySelectorAll(".convo").forEach((b) => b.classList.toggle("sel", b.dataset.phone === phone));
+  await renderThread(true);
+}
+
+let threadSig = "";
+async function renderThread(scroll) {
+  if (!selected) return;
+  const { events } = await api(`/api/events?phone=${encodeURIComponent(selected)}&limit=1000`);
+  const sig = selected + ":" + (events[0]?.id ?? 0);
+  if (sig === threadSig && !scroll) return;
+  threadSig = sig;
+  const evs = events.slice().reverse();
+  const conv = state?.conversations.find((c) => c.phone === selected);
+  const sent = evs.filter((e) => e.type === "sent");
+  const tokens = sent.reduce((a, e) => a + (e.usage ? e.usage.input + e.usage.output + e.usage.cacheRead + e.usage.cacheWrite : 0), 0);
+  const lat = sent.filter((e) => e.latencyMs != null);
+  const avg = lat.length ? Math.round(lat.reduce((a, e) => a + e.latencyMs, 0) / lat.length) : null;
+  let lastDay = "";
+  const body = evs
+    .map((e) => {
+      const day = new Date(e.ts).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+      const sep = day !== lastDay ? `<div class="sysline">${esc(day)}</div>` : "";
+      lastDay = day;
+      if (e.type === "received") {
+        const h = HANDLED[e.handled] || { label: e.handled, cls: "" };
+        const ignored = e.handled === "paused" || e.handled === "not_allowed";
+        return sep + `<div class="msg in${ignored ? " ignored" : ""}">${wa(e.text)}<div class="meta">${fmtTime(e.ts)}${e.handled !== "replied" ? `<span class="tag ${h.cls}">${h.label}</span>` : ""}</div></div>`;
+      }
+      const meta = [fmtTime(e.ts)];
+      if (e.latencyMs != null) meta.push(`⏱ ${fmtMs(e.latencyMs)}`);
+      if (e.usage) meta.push(`${fmtNum(e.usage.input + e.usage.cacheRead + e.usage.cacheWrite)} in / ${fmtNum(e.usage.output)} out tokens`);
+      if (e.fallback) meta.push(`<span class="tag bad">fallback${e.error ? ": " + esc(e.error) : ""}</span>`);
+      return sep + `<div class="msg out">${chipsHtml(e.toolCalls)}${wa(e.text)}<div class="meta">${meta.join(" · ")}</div></div>`;
+    })
+    .join("");
+  const el = $("thread");
+  const msgsEl = el.querySelector(".msgs");
+  const atBottom = !msgsEl || msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 40;
+  el.innerHTML = `<div class="thread-head"><b>${esc(conv?.name || "+" + selected)}</b><span class="muted">+${esc(selected)}</span>
+      <span style="margin-left:auto" class="tag">${evs.filter((e) => e.type === "received").length} in · ${sent.length} out</span>
+      <span class="tag">avg ${fmtMs(avg)}</span><span class="tag">${fmtNum(tokens)} tokens</span></div>
+    <div class="msgs">${body || '<div class="empty">No messages.</div>'}</div>`;
+  const m = el.querySelector(".msgs");
+  if (scroll || atBottom) m.scrollTop = m.scrollHeight;
+}
+
+// ---- Activity feed ----
+function evMatches(e, f) {
+  if (f === "all") return true;
+  if (f === "messages") return e.type !== "system";
+  if (f === "tools") return e.type === "sent" && e.toolCalls?.length;
+  if (f === "ignored") return e.type === "received" && (e.handled === "paused" || e.handled === "not_allowed");
+  if (f === "errors") return (e.type === "system" && e.level === "error") || (e.type === "sent" && (e.error || e.fallback || e.toolCalls?.some((t) => !t.ok)));
+  if (f === "system") return e.type === "system";
+}
+$("filters").querySelectorAll("button").forEach((b) => (b.onclick = () => {
+  feedFilter = b.dataset.f;
+  $("filters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  refreshFeed(true);
+}));
+
+let feedEvents = [];
+async function refreshFeed(force) {
+  const { events } = await api("/api/events?limit=300");
+  const top = events[0]?.id ?? 0;
+  if (!force && top === lastFeedTop) return;
+  const prevTop = lastFeedTop;
+  lastFeedTop = top;
+  feedEvents = events;
+  const shown = events.filter((e) => evMatches(e, feedFilter)).slice(0, 150);
+  if (!shown.length) {
+    $("feed").innerHTML = `<div class="empty">Nothing here yet.</div>`;
+    return;
+  }
+  $("feed").innerHTML = shown
+    .map((e) => {
+      const isNew = prevTop && e.id > prevTop ? " new" : "";
+      const t = `<div class="t" title="${esc(fmtDateTime(e.ts))}">${fmtTime(e.ts)}</div>`;
+      const who = e.phone ? `<button class="link" data-phone="${esc(e.phone)}">${esc(displayName(e.phone))}</button>` : "";
+      if (e.type === "system") {
+        const icon = e.level === "error" ? "🔴" : e.level === "warn" ? "🟡" : "⚙️";
+        return `<div class="ev${isNew}">${t}<div>${icon}</div><div class="what"><span class="${e.level === "error" ? "" : "ink2"}">${esc(e.text)}</span></div></div>`;
+      }
+      if (e.type === "received") {
+        const h = HANDLED[e.handled] || { label: e.handled, cls: "" };
+        return `<div class="ev${isNew}">${t}<div>💬</div><div class="what">${who} <span class="muted">wrote</span> <span class="tag ${h.cls}">${h.label}</span><div class="txt">${wa(e.text)}</div></div></div>`;
+      }
+      const bad = e.error || e.fallback;
+      const extra = [e.latencyMs != null ? fmtMs(e.latencyMs) : "", e.usage ? `${fmtNum(e.usage.input + e.usage.output + e.usage.cacheRead + e.usage.cacheWrite)} tokens` : ""].filter(Boolean).join(" · ");
+      return `<div class="ev${isNew}">${t}<div>🤖</div><div class="what"><span class="muted">Replied to</span> ${who} ${extra ? `<span class="muted">· ${extra}</span>` : ""} ${bad ? `<span class="tag bad">${esc(e.error || "fallback")}</span>` : ""}
+        ${e.toolCalls?.length ? `<div style="margin-top:4px">${chipsHtml(e.toolCalls)}</div>` : ""}<div class="txt">${wa(e.text)}</div></div></div>`;
+    })
+    .join("");
+  $("feed").querySelectorAll(".link").forEach((b) => (b.onclick = () => {
+    selectConvo(b.dataset.phone);
+    $("thread").scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
+}
+
+// ---- Operations panels ----
+function meterList(entries, empty) {
+  const max = Math.max(1, ...entries.map((e) => e[1]));
+  if (!entries.length) return `<div class="empty">${empty}</div>`;
+  return `<ul class="list">${entries
+    .map(([label, n, note]) => `<li style="display:block"><div style="display:flex;gap:8px"><span class="grow">${label}</span><span class="num">${fmtNum(n)}</span></div>${note ? `<div class="muted" style="font-size:12px">${note}</div>` : ""}<div class="meter"><div style="width:${(n / max) * 100}%"></div></div></li>`)
+    .join("")}</ul>`;
+}
+
+function renderOps(s) {
+  const st = s.stats;
+  const TOOL_NAMES = { check_availability: "🔎 Availability checks", book_appointment: "📅 Booking attempts", list_my_appointments: "📋 Appointment lookups", cancel_appointment: "🗑️ Cancellations" };
+  $("tools").innerHTML = meterList(
+    Object.entries(st.tools).sort((a, b) => b[1] - a[1]).map(([k, n]) => [TOOL_NAMES[k] || k, n, k === "book_appointment" ? `${st.bookings} booked · ${st.failedBookings} refused` : ""]),
+    "No tool calls yet.",
+  );
+  $("handled").innerHTML = meterList(
+    Object.entries(st.handled).filter(([, n]) => n).sort((a, b) => b[1] - a[1]).map(([k, n]) => [`<span class="tag ${HANDLED[k]?.cls || ""}">${HANDLED[k]?.label || k}</span>`, n]),
+    "No messages received yet.",
+  );
+  const c = s.config;
+  $("system").innerHTML = `<dl class="kv">
+    <dt>Replies</dt><dd>${s.repliesEnabled ? '<span class="tag good">✓ ON</span>' : '<span class="tag warn">⏸ OFF</span>'}</dd>
+    <dt>WhatsApp</dt><dd>${esc(s.connection)}${s.me ? " · +" + esc(s.me) : ""}</dd>
+    <dt>Connected</dt><dd>${s.connectedSince ? `${duration(s.now - s.connectedSince)} (since ${fmtDateTime(s.connectedSince)})` : "—"}</dd>
+    <dt>Uptime</dt><dd>${duration(s.now - s.startedAt)}</dd>
+    <dt>Model</dt><dd>${esc(c.model)}</dd>
+    <dt>Allowlist</dt><dd>${c.allowedNumbers.length ? c.allowedNumbers.map((n) => "+" + esc(n)).join(", ") : '<span class="tag warn">Everyone</span>'}</dd>
+    <dt>Calendar</dt><dd>${esc(c.calendarId)}</dd>
+    <dt>Timezone</dt><dd>${esc(c.timezone)}</dd>
+    <dt>Logging since</dt><dd>${st.since ? fmtDateTime(st.since) : "—"}</dd>
+  </dl>`;
+  const u = st.usage;
+  const totalIn = u.input + u.cacheRead + u.cacheWrite;
+  $("usage").innerHTML = `<dl class="kv">
+    <dt>Input tokens</dt><dd>${fmtNum(totalIn)}</dd>
+    <dt>&nbsp;· cached reads</dt><dd>${fmtNum(u.cacheRead)}${totalIn ? ` (${Math.round((u.cacheRead / totalIn) * 100)}%)` : ""}</dd>
+    <dt>&nbsp;· cache writes</dt><dd>${fmtNum(u.cacheWrite)}</dd>
+    <dt>&nbsp;· uncached</dt><dd>${fmtNum(u.input)}</dd>
+    <dt>Output tokens</dt><dd>${fmtNum(u.output)}</dd>
+    <dt>Per reply (avg)</dt><dd>${st.sent.total ? fmtNum(Math.round((totalIn + u.output) / st.sent.total)) : "—"}</dd>
+  </dl>`;
+  const top = s.conversations.slice().sort((a, b) => b.count - a.count).slice(0, 6);
+  $("top").innerHTML = meterList(top.map((t) => [`<button class="link" data-phone="${esc(t.phone)}">${esc(t.name || "+" + t.phone)}</button>`, t.count, `last ${ago(t.lastTs)}`]), "No contacts yet.");
+  $("top").querySelectorAll(".link").forEach((b) => (b.onclick = () => { selectConvo(b.dataset.phone); $("thread").scrollIntoView({ behavior: "smooth", block: "center" }); }));
+}
+
+async function refreshAppointments() {
+  try {
+    const r = await api("/api/appointments");
+    if (!r.ok) {
+      $("appts").innerHTML = `<li><span class="tag bad">Calendar error</span> <span class="ink2">${esc(r.error)}</span></li>`;
+      return;
+    }
+    $("appts").innerHTML = r.appointments.length
+      ? r.appointments.map((a) => `<li style="display:block"><div>${esc(a.title || "(no title)")}</div><div class="muted" style="font-size:12px">${esc(a.when)}</div></li>`).join("")
+      : `<li class="empty">No upcoming appointments.</li>`;
+  } catch (e) {
+    $("appts").innerHTML = `<li class="empty">${esc(e.message)}</li>`;
+  }
+}
+
+// ---- Main loop ----
+let lastChartSig = "";
+async function refresh() {
+  try {
+    state = await api("/api/state");
+    renderHeader(state);
+    renderKpis(state.stats);
+    const chartSig = JSON.stringify([state.stats.perHour, state.stats.perDay]);
+    if (chartSig !== lastChartSig) { lastChartSig = chartSig; renderCharts(state.stats); }
+    renderConvos(state.conversations);
+    renderOps(state);
+    await Promise.all([refreshFeed(false), renderThread(false)]);
+    $("footer").textContent = `Auto-refreshes every 3 seconds · last update ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    $("footer").innerHTML = `<span class="tag bad">⚠️ ${esc(e.message)}</span> — retrying…`;
+    $("conn").innerHTML = `<span class="dot bad"></span><span>Dashboard can't reach the bot</span>`;
+  }
+}
+addEventListener("resize", () => state && renderCharts(state.stats));
+refresh();
+refreshAppointments();
+setInterval(refresh, 3000);
+setInterval(refreshAppointments, 60000);
+</script>
+</body>
+</html>
